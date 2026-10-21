@@ -152,6 +152,20 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .segmented button + button { border-left: 1px solid var(--border); }
 .segmented button[aria-pressed="true"] { background: var(--accent); color: #fff; }
 
+/* Phones and small windows: one or two compact toolbar rows, icon buttons. */
+@media (max-width: 900px), (max-height: 500px) {
+  #toolbar { gap: 6px; padding: 6px 8px; }
+  .group { gap: 6px; }
+  .btn { min-height: 40px; padding: 0 10px; font-size: 16px; }
+  .btn .label { display: none; }
+  .btn.icon { min-width: 40px; padding: 0 8px; }
+  .segmented button { min-height: 40px; padding: 0 9px; font-size: 15px; }
+  .file-name { font-size: 16px; max-width: 34vw; }
+  .save-state { display: none; }
+  .pane-bar { padding: 4px 8px; }
+  .btn.small { min-height: 32px; }
+}
+
 /* ---------- panes ---------- */
 #panes { flex: 1; display: flex; min-height: 0; }
 #panes[data-layout="split"] { flex-direction: row; }

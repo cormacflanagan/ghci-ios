@@ -62,7 +62,8 @@ let current = store.get('ghci.current', null);
 if (!files[current]) current = Object.keys(files).sort()[0];
 
 const settings = Object.assign(
-  { font: 22, theme: 'light', layout: 'split' },
+  // Large text for projecting from a tablet or laptop; smaller on phones.
+  { font: Math.min(screen.width, screen.height) < 600 ? 16 : 22, theme: 'light', layout: 'split' },
   store.get('ghci.settings', {}),
 );
 let history = store.get('ghci.history', []);
@@ -793,7 +794,12 @@ function init() {
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowUp') { e.preventDefault(); historyStep(-1); }
     else if (e.key === 'ArrowDown') { e.preventDefault(); historyStep(1); }
-    else if (e.key === 'c' && e.ctrlKey) { e.preventDefault(); write('^C\n', 'sys'); repl.interrupt(); }
+    else if (e.key === 'c' && e.ctrlKey && repl.state === 'busy' && input.selectionStart === input.selectionEnd) {
+      // Ctrl-C stops a running expression; otherwise it is copy, as usual.
+      e.preventDefault();
+      write('^C\n', 'sys');
+      repl.interrupt();
+    }
     else if (e.key === 'l' && e.ctrlKey) { e.preventDefault(); clearOutput(); }
   });
   outEl.addEventListener('click', (e) => {

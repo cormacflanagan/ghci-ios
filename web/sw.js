@@ -1,6 +1,6 @@
 // Offline support.  Serves the app from the cache, and refreshes the cache in
 // the background so the next launch picks up a new version.
-const CACHE = 'haskell-repl-v4';
+const CACHE = 'haskell-repl-v5';
 const ASSETS = [
   './', 'index.html', 'style.css', 'app.js', 'repl.js', 'worker.js',
   'vendor/editor.js', 'vendor/share.js', 'mhs/mhs.js', 'mhs/mhs.wasm',
