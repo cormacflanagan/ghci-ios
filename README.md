@@ -31,8 +31,7 @@ Always use the Home Screen app. Safari tabs keep their own separate file storage
   current file through the share sheet (Files, AirDrop, Mail).
 - A− / A+ (⌘− / ⌘+) change the text size. ◐ switches between light and dark.
   Code / Both / REPL choose the layout.
-- The symbol bar above the keyboard inserts `->`, `<-`, `::`, `\`, `|` and so
-  on. ↑/↓ step through REPL history.
+- ↑/↓ (hardware keyboard) step through REPL history.
 - iPad "smart punctuation" (curly quotes, em dashes) is turned back into
   ASCII automatically.
 

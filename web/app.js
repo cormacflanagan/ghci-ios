@@ -593,40 +593,6 @@ function setLayout(layout) {
   applySettings();
 }
 
-// ---------------------------------------------------------------- symbol keys
-
-const KEYS = ['->', '<-', '=>', '::', '\\', '|', '_', '=', '==', '/=', '++', '$', '.', '`',
-  '(', ')', '[', ']', '{', '}', '<', '>', '"', "'", ':', ',', '+', '-', '*', '&&', '||', '!!',
-  '⇥', '↑', '↓'];
-let lastFocus = 'editor';
-
-function pressKey(k) {
-  const input = $('#input');
-  if (lastFocus === 'console') {
-    if (k === '↑' || k === '↓') return historyStep(k === '↑' ? -1 : 1);
-    const text = k === '⇥' ? '  ' : k;
-    input.setRangeText(text, input.selectionStart, input.selectionEnd, 'end');
-    input.focus();
-  } else {
-    if (k === '↑' || k === '↓') return editor.moveLine(k === '↑' ? -1 : 1);
-    editor.insert(k === '⇥' ? '  ' : k);
-  }
-}
-
-function buildKeys() {
-  const bar = $('#keys');
-  for (const k of KEYS) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = k;
-    // Keep the keyboard and the focus where they are.
-    b.addEventListener('pointerdown', (e) => e.preventDefault());
-    b.addEventListener('mousedown', (e) => e.preventDefault());
-    b.addEventListener('click', () => pressKey(k));
-    bar.appendChild(b);
-  }
-}
-
 // ---------------------------------------------------------------- console input
 
 let histPos = history.length;
@@ -651,11 +617,13 @@ function toast(msg) {
   toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
 }
 
-// Keep the layout above the on-screen keyboard.
+// Fill the window; while the on-screen keyboard is up, shrink to the visible
+// part so the REPL input stays above the keyboard.
 function fitViewport() {
   const vv = window.visualViewport;
-  const h = vv ? vv.height : window.innerHeight;
-  document.documentElement.style.setProperty('--app-height', h + 'px');
+  const keyboard = vv && vv.height < window.innerHeight - 80;
+  document.documentElement.classList.toggle('keyboard', !!keyboard);
+  if (keyboard) document.documentElement.style.setProperty('--app-height', vv.height + 'px');
   if (window.scrollY) window.scrollTo(0, 0);
 }
 
@@ -681,7 +649,6 @@ function init() {
   $('#save-state').textContent = 'Saved';
   $('#version').textContent = `Version ${APP_VERSION} · Haskell by MicroHs`;
   applySettings();
-  buildKeys();
 
   $('#load-btn').addEventListener('click', guard(() => loadFile(current)));
   $('#stop-btn').addEventListener('click', guard(() => { write('^C\n', 'sys'); repl.interrupt(); }));
@@ -723,8 +690,6 @@ function init() {
     else if (e.key === 'c' && e.ctrlKey) { e.preventDefault(); write('^C\n', 'sys'); repl.interrupt(); }
     else if (e.key === 'l' && e.ctrlKey) { e.preventDefault(); clearOutput(); }
   });
-  input.addEventListener('focus', () => { lastFocus = 'console'; });
-  editor.view.contentDOM.addEventListener('focus', () => { lastFocus = 'editor'; });
   outEl.addEventListener('click', (e) => {
     // Tapping the transcript focuses the input, unless text is being selected.
     if (!window.getSelection().toString() && !e.target.classList.contains('loc')) input.focus({ preventScroll: true });
