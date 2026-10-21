@@ -703,14 +703,27 @@ function toast(msg) {
   toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
 }
 
-// Fill the window; while the on-screen keyboard is up, shrink to the visible
-// part so the REPL input stays above the keyboard.
+// Fill the window.  While the on-screen keyboard is up, cover just the
+// visible part so the REPL input stays above the keyboard.  iOS scrolls the
+// page to show the caret even though nothing here scrolls; undo that.
 function fitViewport() {
+  const app = $('#app');
   const vv = window.visualViewport;
-  const keyboard = vv && vv.height < window.innerHeight - 80;
-  document.documentElement.classList.toggle('keyboard', !!keyboard);
-  if (keyboard) document.documentElement.style.setProperty('--app-height', vv.height + 'px');
-  if (window.scrollY) window.scrollTo(0, 0);
+  if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+  if (vv && vv.height < window.innerHeight - 80) {
+    app.style.top = vv.offsetTop + 'px';
+    app.style.bottom = 'auto';
+    app.style.height = vv.height + 'px';
+  } else {
+    app.style.top = app.style.bottom = app.style.height = '';
+  }
+}
+
+// The keyboard animates in and out, so check again once it has settled.
+function fitSoon() {
+  fitViewport();
+  setTimeout(fitViewport, 100);
+  setTimeout(fitViewport, 400);
 }
 
 function guard(fn) {
@@ -801,7 +814,11 @@ function init() {
     window.visualViewport.addEventListener('resize', fitViewport);
     window.visualViewport.addEventListener('scroll', fitViewport);
   }
-  window.addEventListener('resize', fitViewport);
+  window.addEventListener('resize', fitSoon);
+  window.addEventListener('orientationchange', fitSoon);
+  window.addEventListener('scroll', fitViewport);
+  document.addEventListener('focusin', fitSoon);
+  document.addEventListener('focusout', fitSoon);
   fitViewport();
 
   const flush = () => { if (dirty) saveFiles(); };
