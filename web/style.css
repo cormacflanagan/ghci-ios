@@ -270,6 +270,12 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 }
 #file-list li.current .open { color: var(--accent); font-weight: 700; }
 .sheet-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* The QR code stays black on white in both themes so cameras can read it. */
+.share-card { width: min(92vw, calc(100% - 32px), 900px); text-align: center; }
+.share-card .sheet-head { text-align: left; }
+#qr { margin: 12px auto; width: min(100%, calc(100vh - 290px)); }
+#qr svg { display: block; width: 100%; height: auto; border-radius: 8px; }
+#qr .too-big { padding: 40px 10px; font-size: 19px; }
 .hint { color: var(--muted); font-size: 15px; line-height: 1.4; }
 .hint.version { font-size: 13px; }
 

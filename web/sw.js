@@ -1,9 +1,9 @@
 // Offline support.  Serves the app from the cache, and refreshes the cache in
 // the background so the next launch picks up a new version.
-const CACHE = 'haskell-repl-v2';
+const CACHE = 'haskell-repl-v3';
 const ASSETS = [
   './', 'index.html', 'style.css', 'app.js', 'repl.js', 'worker.js',
-  'vendor/editor.js', 'mhs/mhs.js', 'mhs/mhs.wasm',
+  'vendor/editor.js', 'vendor/share.js', 'mhs/mhs.js', 'mhs/mhs.wasm',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 

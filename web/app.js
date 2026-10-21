@@ -1,5 +1,6 @@
 import { createEditor, unsmart } from './vendor/editor.js';
 import { Repl, probeDepth } from './repl.js';
+import { makeFragment, readFragment, qrSvg } from './vendor/share.js';
 
 const APP_VERSION = '1.0.0';
 // Identifies the interpreter build; the stack calibration is redone when it changes.
@@ -238,6 +239,7 @@ function clearOutput() {
 // ---------------------------------------------------------------- REPL
 
 let loaded = null;   // file name last loaded with :load
+let announceLoad = false;   // show the result of the load done at startup
 const savedDepth = store.get('ghci.depth', null);
 
 const repl = new Repl({
@@ -245,7 +247,8 @@ const repl = new Repl({
   state: setStatus,
   started() {
     syncFiles();
-    if (loaded && files[loaded]) loadFile(loaded, { quiet: true });
+    if (loaded && files[loaded]) loadFile(loaded, { quiet: !announceLoad });
+    announceLoad = false;
     maybeCalibrate();
   },
   crashed(reason) {
@@ -297,7 +300,10 @@ function findFile(arg) {
 function loadFile(name, { quiet = false } = {}) {
   if (!repl.started) {
     loaded = name;   // loaded automatically once the interpreter is up
-    if (!quiet) write(`${name} will be loaded when the interpreter has started.\n`, 'sys');
+    if (!quiet) {
+      announceLoad = true;
+      write(`${name} will be loaded when the interpreter has started.\n`, 'sys');
+    }
     return;
   }
   if (repl.busy) {
@@ -541,6 +547,86 @@ async function exportFile() {
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 
+// ---------------------------------------------------------------- share links
+
+let shareUrl = '';
+
+async function shareFile() {
+  saveFiles();
+  const name = current;
+  shareUrl = location.origin + location.pathname + await makeFragment(name, files[name]);
+  $('#share-title').textContent = name;
+  const svg = qrSvg(shareUrl);
+  const qr = $('#qr');
+  if (svg) {
+    qr.innerHTML = svg;
+    $('#share-hint').textContent = 'Scan with a phone or tablet camera to open a copy of this file in the Haskell REPL.';
+  } else {
+    qr.innerHTML = '';
+    const p = document.createElement('p');
+    p.className = 'too-big';
+    p.textContent = `${name} is too large for a QR code. Copy or send the link instead.`;
+    qr.appendChild(p);
+    $('#share-hint').textContent = '';
+  }
+  $('#share-sheet').hidden = false;
+}
+
+async function copyLink() {
+  try {
+    await navigator.clipboard.writeText(shareUrl);
+    toast('Link copied');
+  } catch (e) {
+    prompt('Copy this link:', shareUrl);
+  }
+}
+
+async function sendLink() {
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: current, url: shareUrl });
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
+  }
+  copyLink();
+}
+
+function uniqueName(name) {
+  const b = baseName(name);
+  let i = 2;
+  while (files[`${b}${i}.hs`] !== undefined) i++;
+  return `${b}${i}.hs`;
+}
+
+// Opens a file arriving in a share link (#f=...), then loads it.
+async function receiveShared() {
+  if (!location.hash.startsWith('#f=')) return;
+  let shared = null;
+  try {
+    shared = await readFragment(location.hash);
+  } catch (e) {
+    toast('Could not open the shared file: ' + e.message);
+  }
+  window.history.replaceState(null, '', location.pathname + location.search);
+  if (!shared) return;
+  let name = cleanName(shared.name);
+  const text = shared.text.replace(/\r\n?/g, '\n');
+  if (files[name] !== undefined && files[name] !== text && !(name === current && editor.getText() === text)) {
+    if (!confirm(`Replace your ${name} with the shared version?\n\nCancel keeps yours and saves the shared one as a new file.`)) {
+      name = uniqueName(name);
+    }
+  }
+  files[name] = text;
+  if (name === current) editor.setText(text);
+  openFile(name);
+  closeSheet();
+  $('#share-sheet').hidden = true;
+  toast('Opened shared file ' + name);
+  loadFile(name);
+}
+
 async function importFiles(list) {
   let last = null;
   for (const f of Array.from(list)) {
@@ -677,6 +763,13 @@ function init() {
     e.target.value = '';
   }));
   $('#export-file').addEventListener('click', guard(exportFile));
+  $('#share-btn').addEventListener('click', guard(shareFile));
+  $('#copy-link').addEventListener('click', guard(copyLink));
+  $('#send-link').addEventListener('click', guard(sendLink));
+  $('#share-sheet').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget || e.target.hasAttribute('data-close')) $('#share-sheet').hidden = true;
+  });
+  window.addEventListener('hashchange', guard(receiveShared));
 
   const input = $('#input');
   $('#input-row').addEventListener('submit', guard((e) => {
@@ -727,6 +820,7 @@ function init() {
   window.__editor = editor;
   write('Haskell REPL (MicroHs). Type an expression below, or tap Load to load the file in the editor.\n', 'sys');
   repl.start();
+  guard(receiveShared)();
 }
 
 init();

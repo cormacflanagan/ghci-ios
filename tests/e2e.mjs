@@ -194,12 +194,37 @@ try {
   const fs2 = await page.$eval('#output', (el) => getComputedStyle(el).fontSize);
   check('font size increases', parseFloat(fs2) > parseFloat(fs1), fs1 + ' -> ' + fs2);
 
+  // Share: the QR code appears, and the link opens the file elsewhere.
+  await page.click('#files-btn');
+  await page.click('#file-list li:has-text("Helpers.hs") .open');
+  await page.click('#share-btn');
+  await page.waitForSelector('#qr svg');
+  check('share shows a QR code', true);
+  await page.screenshot({ path: (process.env.SHOT || '/tmp/ghci-ipad.png').replace('.png', '-share.png') });
+  const link = await page.evaluate(async () => {
+    const { makeFragment } = await import('./vendor/share.js');
+    return location.origin + location.pathname + await makeFragment('Helpers.hs', 'module Helpers where\n\ntriple :: Int -> Int\ntriple = (* 3)\n');
+  });
+  await page.click('#share-sheet [data-close]');
+  const student = await (await browser.newContext({ ...devices['iPhone 13'] })).newPage();
+  await student.goto(link);
+  student.on('console', (m) => process.env.DEBUG && console.log('student:', m.text()));
+  globalThis.student = student;
+  await student.waitForFunction(() => document.querySelector('#output').innerText.includes('Ok, Helpers loaded'), null, { timeout: 90000 });
+  check('share link opens and loads the file', (await student.textContent('#file-name')) === 'Helpers.hs');
+  check('share link is removed from the address bar', !(await student.evaluate(() => location.hash)));
+  await student.fill('#input', 'triple 5');
+  await student.press('#input', 'Enter');
+  await student.waitForFunction(() => /\n15\n?/.test(document.querySelector('#output').innerText), null, { timeout: 30000 });
+  check('shared definitions run', true);
+
   await page.screenshot({ path: process.env.SHOT || '/tmp/ghci-ipad.png' });
   check('no uncaught page errors', pageErrors.length === 0, pageErrors.join('; '));
 } catch (e) {
   failures++;
   console.log('FAIL exception', e.message);
   console.log((await output().catch(() => '')).slice(-1500));
+  if (globalThis.student) console.log('STUDENT:', await globalThis.student.evaluate(() => document.querySelector('#file-name').textContent + ' | ' + document.querySelector('#status').textContent + ' | ' + document.querySelector('#output').innerText + ' | ' + location.href).catch((e) => e.message));
   await page.screenshot({ path: '/tmp/ghci-fail.png' }).catch(() => {});
 } finally {
   await browser.close();

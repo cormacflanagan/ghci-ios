@@ -25,6 +25,10 @@
         </button>
         <button id="file-name" class="file-name" title="Rename file"></button>
         <span id="save-state" class="save-state"></span>
+        <button id="share-btn" class="btn" title="Share this file with a QR code">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3M21 14v7h-4M14 18v3"/></svg>
+          <span>Share</span>
+        </button>
       </div>
       <div class="group">
         <button id="load-btn" class="btn primary" title="Load file into the REPL (⌘↵)">
@@ -88,6 +92,20 @@
       </div>
       <p class="hint">Files are kept inside this app automatically. Use <b>Open from device</b> to bring in .hs files from the Files app, and <b>Save copy to device</b> to put the current file into Files, AirDrop it, or email it.</p>
       <p class="hint version" id="version"></p>
+    </div>
+  </div>
+  <div id="share-sheet" class="sheet" hidden>
+    <div class="sheet-card share-card" role="dialog" aria-label="Share file">
+      <div class="sheet-head">
+        <h2 id="share-title"></h2>
+        <div class="sheet-actions">
+          <button id="copy-link" class="btn small">Copy link</button>
+          <button id="send-link" class="btn small">Send link…</button>
+          <button class="btn small" data-close>Done</button>
+        </div>
+      </div>
+      <div id="qr"></div>
+      <p id="share-hint" class="hint">Scan with a phone or tablet camera to open a copy of this file in the Haskell REPL.</p>
     </div>
   </div>
   <input id="file-input" type="file" multiple hidden>

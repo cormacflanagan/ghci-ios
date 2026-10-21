@@ -29,6 +29,10 @@ Always use the Home Screen app. Safari tabs keep their own separate file storage
 - **Files**: files are saved inside the app automatically. *Open from device*
   imports `.hs` files from the Files app. *Save copy to device* exports the
   current file through the share sheet (Files, AirDrop, Mail).
+- **Share** shows the current file as a QR code. Students scan it with their
+  camera and get a copy of the file in their own browser, loaded and ready
+  to run. The file travels inside the link itself (no server). Very large
+  files fall back to Copy link / Send link.
 - A− / A+ (⌘− / ⌘+) change the text size. ◐ switches between light and dark.
   Code / Both / REPL choose the layout.
 - ↑/↓ (hardware keyboard) step through REPL history.
