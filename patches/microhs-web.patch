@@ -1,0 +1,295 @@
+diff --git a/src/MicroHs/Interactive.hs b/src/MicroHs/Interactive.hs
+index d20c36eb..bd6da169 100644
+--- a/src/MicroHs/Interactive.hs
++++ b/src/MicroHs/Interactive.hs
+@@ -188,7 +188,11 @@ commands =
+     )
+   , ("clear       clear all definitions", const $ do
+       updateLines (const preamble)
+-      modify $ \ is -> is{ isCache = emptyCache, isSymbols = noSymbols }
++      -- Start from the embedded packages, like at startup; with an empty
++      -- cache an mhs with embedded packages can no longer find the Prelude.
++      flags <- gets isFlags
++      cash <- liftIO $ loadEmbedded flags emptyCache
++      modify $ \ is -> is{ isCache = cash, isSymbols = noSymbols }
+       return True
+     )
+   , ("reload      reload modules", const $ do
+diff --git a/src/runtime/bfile.c b/src/runtime/bfile.c
+index 2fd0d966..e163f34c 100644
+--- a/src/runtime/bfile.c
++++ b/src/runtime/bfile.c
+@@ -409,6 +409,10 @@ get_mem(struct BFILE *bp, uint8_t **bufp, size_t *lenp)
+ #include <io.h>                 /* for _isatty() */
+ #endif
+ 
++#if defined(USE_WEB_INPUT)
++static int web_stdin_pushback = -1;
++#endif  /* USE_WEB_INPUT */
++
+ struct BFILE_file {
+   BFILE    mets;
+   FILE    *file;
+@@ -419,6 +423,18 @@ getb_file(BFILE *bp)
+ {
+   struct BFILE_file *p = (struct BFILE_file *)bp;
+   CHECKBFILE(bp, getb_file);
++#if defined(USE_WEB_INPUT)
++  /* On the web stdin comes from the same queue as the REPL keystrokes. */
++  if (p->file == stdin) {
++    if (web_stdin_pushback >= 0) {
++      int c = web_stdin_pushback;
++      web_stdin_pushback = -1;
++      return c;
++    }
++    int c = getraw();
++    return c == 4 ? -1 : c;     /* CTRL-D is end of file */
++  }
++#endif  /* USE_WEB_INPUT */
+   return fgetc(p->file);
+ }
+ 
+@@ -427,6 +443,12 @@ ungetb_file(int c, BFILE *bp)
+ {
+   struct BFILE_file *p = (struct BFILE_file *)bp;
+   CHECKBFILE(bp, getb_file);
++#if defined(USE_WEB_INPUT)
++  if (p->file == stdin) {
++    web_stdin_pushback = c;
++    return;
++  }
++#endif  /* USE_WEB_INPUT */
+   ungetc(c, p->file);
+ }
+ 
+@@ -492,6 +514,20 @@ readb_file(uint8_t *buf, size_t size, BFILE *bp)
+ {
+   struct BFILE_file *p = (struct BFILE_file *)bp;
+   CHECKBFILE(bp, getb_file);
++#if defined(USE_WEB_INPUT)
++  if (p->file == stdin) {
++    size_t n = 0;
++    while (n < size) {
++      int c = getb_file(bp);
++      if (c < 0)
++        break;
++      buf[n++] = c;
++      if (c == '\n')
++        break;
++    }
++    return n;
++  }
++#endif  /* USE_WEB_INPUT */
+   return fread(buf, 1, size, p->file);
+ }
+ 
+diff --git a/src/runtime/eval.c b/src/runtime/eval.c
+index 420b9014..58101fb4 100644
+--- a/src/runtime/eval.c
++++ b/src/runtime/eval.c
+@@ -854,16 +854,36 @@ heapoffs_t next_scan_index;
+ 
+ int want_gc_red = 0;
+ 
++#if defined(USE_WEB_INPUT)
++/* Browsers give WebAssembly a small native stack, and running out of it
++ * kills the whole runtime.  Count nested evali() calls and raise a Haskell
++ * stack overflow exception well before that happens. */
++long web_c_depth = 0;
++long web_max_c_depth = 1000;
++EMSCRIPTEN_KEEPALIVE
++void set_max_c_depth(int d) { web_max_c_depth = d; }
++#endif  /* USE_WEB_INPUT */
++
+ NORETURN void
+ memerr(void)
+ {
+   ERR("Out of memory");
+ }
+ 
++#if defined(USE_WEB_INPUT)
++int web_in_gc = 0;
++NORETURN void web_stack_overflow(void);
++#endif  /* USE_WEB_INPUT */
++
+ NORETURN
+ void
+ stackerr(void)
+ {
++#if defined(USE_WEB_INPUT)
++  /* Make it a Haskell exception so the REPL survives. */
++  if (!web_in_gc)
++    web_stack_overflow();
++#endif  /* USE_WEB_INPUT */
+   ERR("stack overflow");
+ }
+ 
+@@ -2038,6 +2058,14 @@ raise_rts(enum rts_exn exn) {
+   raise_exn(mkInt(exn));
+ }
+ 
++#if defined(USE_WEB_INPUT)
++NORETURN void
++web_stack_overflow(void)
++{
++  raise_rts(exn_stackoverflow);
++}
++#endif  /* USE_WEB_INPUT */
++
+ /***************** GC ******************/
+ 
+ /* Set FREE bit to 0 */
+@@ -2135,6 +2163,21 @@ new_ap(NODEPTR f, NODEPTR a)
+ 
+ NODEPTR evali(NODEPTR n);
+ 
++#if defined(USE_WEB_INPUT)
++/* Keep setjmp() out of evali().  With Emscripten's setjmp emulation every
++ * call made by a function that contains setjmp() goes through a JavaScript
++ * trampoline, which makes evali() slow and its recursion use a lot of the
++ * browser's stack.  Returns 1 if an exception was thrown to h. */
++static __attribute__((noinline)) int
++catch_evali(struct handler *h, NODEPTR *xp)
++{
++  if (setjmp(h->hdl_buf))
++    return 1;
++  *xp = evali(*xp);
++  return 0;
++}
++#endif  /* USE_WEB_INPUT */
++
+ /* If this is non-0 it means that the threading system is active. */
+ struct mthread *main_thread = 0;
+ 
+@@ -2146,6 +2189,9 @@ start_exec(NODEPTR root)
+   mt = new_thread(new_ap(root, combWorld)); /* main thread */
+   mt->mt_id = MAIN_THREAD;                  /* make it the main thread in case this is foreign export calling */
+   main_thread = mt;
++#if defined(USE_WEB_INPUT)
++  long depth0 = web_c_depth;
++#endif  /* USE_WEB_INPUT */
+ 
+   switch(setjmp(sched)) {
+   case mt_main:
+@@ -2176,6 +2222,9 @@ start_exec(NODEPTR root)
+       release_throwto(mt);      /* release anyone blocked in throwTo to it */
+     }
+   }
++#if defined(USE_WEB_INPUT)
++  web_c_depth = depth0;         /* a longjmp to sched skips the decrements */
++#endif  /* USE_WEB_INPUT */
+ #if THREAD_DEBUG
+   if (thread_trace) {
+     printf("start_exec:\n");
+@@ -3179,6 +3228,10 @@ gc(void)
+ 
+   num_gc++;
+   num_marked = 0;
++#if defined(USE_WEB_INPUT)
++  int exhausted = 0;
++  web_in_gc = 1;
++#endif  /* USE_WEB_INPUT */
+ #if WANT_STDIO
+   if (verbose > 1)
+     PRINT("gc mark\n");
+@@ -3226,8 +3279,13 @@ gc(void)
+   if (num_marked > max_num_marked)
+     max_num_marked = num_marked;
+   num_free = heap_size - heap_start - num_marked;
+-  if (num_free < heap_size / 50)
++  if (num_free < heap_size / 50) {
++#if defined(USE_WEB_INPUT)
++    exhausted = 1;              /* finish the GC, then raise an exception */
++#else  /* USE_WEB_INPUT */
+     ERR("heap exhausted");
++#endif  /* USE_WEB_INPUT */
++  }
+ 
+   gc_scan_time -= GETTIMEMILLI();
+   /* Free unused arrays */
+@@ -3339,6 +3397,11 @@ gc(void)
+     closeb(err);
+   }
+ #endif
++#if defined(USE_WEB_INPUT)
++  web_in_gc = 0;
++  if (exhausted)
++    raise_rts(exn_heapoverflow);
++#endif  /* USE_WEB_INPUT */
+ }
+ 
+ static INLINE
+@@ -5227,6 +5290,11 @@ evali(NODEPTR an)
+   if (++cur_c_stack > max_c_stack)
+     max_c_stack = cur_c_stack;
+ #endif
++#if defined(USE_WEB_INPUT)
++  if (web_c_depth >= web_max_c_depth)
++    raise_rts(exn_stackoverflow);
++  web_c_depth++;
++#endif  /* USE_WEB_INPUT */
+ 
+ /* Reset stack pointer and return. */
+ #define RET do { goto ret; } while(0)
+@@ -6374,6 +6442,11 @@ evali(NODEPTR an)
+     CHKARG2NP;
+     {
+       int red = evalint(x);
++#if defined(USE_WEB_INPUT)
++      /* GC reductions recurse deeply in mark(), which overflows the
++       * small native stack browsers give WebAssembly. */
++      red = 0;
++#endif  /* USE_WEB_INPUT */
+       int oldred = want_gc_red;
+       want_gc_red = red;
+       gc();
+@@ -6585,9 +6658,19 @@ evali(NODEPTR an)
+       cur_handler = h;
+       stackptr_t ostack = stack_ptr;;    /* old stack pointer */
+       enum mask_state omask = runq.mq_head->mt_mask;     /* old mask */
++#if defined(USE_WEB_INPUT)
++      long odepth = web_c_depth;
++#endif  /* USE_WEB_INPUT */
++#if defined(USE_WEB_INPUT)
++      if (catch_evali(h, &x)) {
++#else  /* USE_WEB_INPUT */
+       if (setjmp(h->hdl_buf)) {
++#endif  /* USE_WEB_INPUT */
+         /* An exception occurred: */
+         stack_ptr = ostack;
++#if defined(USE_WEB_INPUT)
++        web_c_depth = odepth;
++#endif  /* USE_WEB_INPUT */
+         runq.mq_head->mt_mask = mask_interruptible; /* evaluate with mask */
+         NODEPTR exn = h->hdl_exn;       /* exception value */
+         cur_handler = h->hdl_old;       /* reset handler */
+@@ -6607,7 +6690,9 @@ evali(NODEPTR an)
+         GOAP2(p, q, z);
+       } else {
+         /* Normal execution: */
++#if !defined(USE_WEB_INPUT)
+         x = evali(x);             /* execute first argument */
++#endif  /* USE_WEB_INPUT */
+         /* No exception occurred */
+         cur_handler = h->hdl_old; /* restore old handler */
+         FREE(h);
+@@ -7095,6 +7180,9 @@ evali(NODEPTR an)
+ #if MAXSTACKDEPTH
+   cur_c_stack = old_cur_c_stack; /* reset rather than counting down, in case of longjump */
+ #endif
++#if defined(USE_WEB_INPUT)
++  web_c_depth--;
++#endif  /* USE_WEB_INPUT */
+   return n;
+ }
+ 
+@@ -7362,7 +7450,9 @@ MHS_INIT_ARGS(
+ 
+   /* GC unused stuff, nice for -o */
+   PUSH(prog);
++#if !defined(USE_WEB_INPUT)
+   want_gc_red = 1;
++#endif  /* USE_WEB_INPUT */
+   gc();
+   gc();                         /* this finds some more GC reductions */
+   want_gc_red = 0;              /* can be enabled, but it is rarely a win */

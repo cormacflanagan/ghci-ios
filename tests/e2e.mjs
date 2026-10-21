@@ -1,0 +1,209 @@
+// End-to-end test in Chromium with an iPad-sized touch viewport.
+//   node tests/e2e.mjs            (CHROMIUM=/path/to/chrome to pick a browser)
+import { chromium, devices } from 'playwright';
+import { serve } from '../scripts/serve.mjs';
+import fs from 'node:fs';
+
+const PORT = 8130;
+const server = await serve(PORT);
+const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
+const context = await browser.newContext({ ...devices['iPad Pro 11 landscape'] });
+const page = await context.newPage();
+const pageErrors = [];
+page.on('pageerror', (e) => { pageErrors.push(e.message); if (process.env.DEBUG) console.log('PAGEERROR', e.stack); });
+page.on('dialog', (d) => d.accept(d.type() === 'prompt' ? (globalThis.nextPrompt ?? '') : undefined));
+
+let failures = 0;
+function check(name, ok, detail = '') {
+  console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : '  ' + detail}`);
+  if (!ok) failures++;
+}
+
+const output = () => page.$eval('#output', (el) => el.innerText);
+const status = () => page.$eval('#status', (el) => el.textContent);
+
+async function waitReady(ms = 60000) {
+  await page.waitForFunction(() => document.querySelector('#status').textContent === 'Ready', null, { timeout: ms });
+}
+
+async function run(line, ms = 30000) {
+  const before = (await output()).length;
+  await page.fill('#input', line);
+  await page.press('#input', 'Enter');
+  await page.waitForTimeout(50);
+  await waitReady(ms);
+  await page.waitForTimeout(100);
+  return (await output()).slice(before);
+}
+
+async function setEditor(text) {
+  await page.evaluate((t) => {
+    const view = window.__editor.view;
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: t } });
+  }, text);
+}
+
+try {
+  await page.goto(`http://localhost:${PORT}/`);
+  await waitReady();
+  check('starts and becomes ready', true);
+
+  let o = await run('2 + 3 * 4');
+  check('evaluates an expression', o.includes('14'), o);
+
+  o = await run(':t map');
+  check(':t works', o.includes('(a -> b) -> [a] -> [b]'), o);
+
+  // Load the sample file.
+  o = await run(':load Intro');
+  check(':load sample', /Ok, Intro loaded/.test(o), o);
+  o = await run('quicksort [3,1,4,1,5,9,2,6]');
+  check('uses loaded definitions', o.includes('[1,1,2,3,4,5,6,9]'), o);
+
+  // Edit and reload with the Load button.
+  await setEditor('double :: Int -> Int\ndouble x = x + x + 1\n');
+  await page.click('#load-btn');
+  await page.waitForTimeout(100);
+  await waitReady();
+  o = await run('double 10');
+  check('Load button picks up edits (headerless file)', o.includes('21'), o);
+
+  // A type error is reported at the right line of a headerless file and links to it.
+  await setEditor('x :: Int\nx = 1\n\ny :: Int\ny = "no"\n');
+  await page.click('#load-btn');
+  await page.waitForTimeout(100);
+  await waitReady();
+  o = await output();
+  check('error location is shifted back to the file\'s own lines', /Intro\.hs:5:\d+/.test(o), o.slice(-400));
+  check('failed load is reported', o.includes('Failed to load Intro.hs'), o.slice(-200));
+  const loc = await page.$('#output .loc');
+  check('error line is clickable', !!loc);
+  if (loc) {
+    await loc.click();
+    const line = await page.evaluate(() => {
+      const v = window.__editor.view;
+      return v.state.doc.lineAt(v.state.selection.main.head).number;
+    });
+    check('clicking the error moves the cursor to it', line === 5, String(line));
+  }
+
+  // Runaway evaluation: Stop interrupts it.
+  await setEditor('module Intro where\n\nloop :: Int -> Int\nloop n = loop (n + 1)\n');
+  await page.click('#load-btn');
+  await page.waitForTimeout(100);
+  await waitReady();
+  await page.fill('#input', 'loop 0');
+  await page.press('#input', 'Enter');
+  await page.waitForTimeout(1500);
+  check('shows Running while busy', (await status()) === 'Running…');
+  await page.click('#stop-btn');
+  await waitReady(15000);
+  o = await output();
+  check('Stop interrupts a loop', /user interrupt|restarted/.test(o), o.slice(-200));
+  o = await run('1 + 1');
+  check('REPL usable after Stop', o.includes('2'), o);
+
+  // Deep recursion is an exception, not a crash.
+  o = await run('foldr (+) 0 [1..1000000]', 60000);
+  check('deep recursion gives stack overflow exception', /stack overflow|restarting/i.test(o), o);
+  o = await run('3 + 3');
+  check('REPL usable after stack overflow', o.includes('6'), o);
+
+  // Runaway memory: Stop recovers (by restarting if needed).
+  await run('let xs = [1..] :: [Integer]');
+  await page.fill('#input', 'length xs');
+  await page.press('#input', 'Enter');
+  await page.waitForTimeout(3000);
+  await page.click('#stop-btn');
+  await waitReady(60000);
+  o = await run('4 + 4');
+  check('REPL usable after memory hog', o.includes('8'), o);
+
+  // A program that reads stdin.
+  await setEditor('module Intro where\n\ngreet :: IO ()\ngreet = do\n  putStrLn "Name?"\n  n <- getLine\n  putStrLn ("Hello, " ++ n ++ "!")\n');
+  await page.click('#load-btn');
+  await page.waitForTimeout(100);
+  await waitReady();
+  await page.fill('#input', 'greet');
+  await page.press('#input', 'Enter');
+  await page.waitForFunction(() => document.querySelector('#output').innerText.includes('Name?'), null, { timeout: 30000 });
+  await page.fill('#input', 'Ada');
+  await page.press('#input', 'Enter');
+  await waitReady();
+  o = await output();
+  check('stdin works for getLine', o.includes('Hello, Ada!'), o.slice(-200));
+
+  // Smart punctuation from the iPad keyboard is undone.
+  o = await run('length “hello”');
+  check('smart quotes are fixed in the REPL', /\b5\b/.test(o), o);
+
+  // Multiple modules.
+  globalThis.nextPrompt = 'Helpers';
+  await page.click('#files-btn');
+  await page.click('#new-file');
+  await setEditor('module Helpers where\n\ntriple :: Int -> Int\ntriple = (* 3)\n');
+  await page.waitForTimeout(600);
+  check('new file is current', (await page.textContent('#file-name')) === 'Helpers.hs');
+  await page.click('#files-btn');
+  await page.click('#file-list li:has-text("Intro.hs") .open');
+  await setEditor('module Intro where\n\nimport Helpers\n\nnine :: Int\nnine = triple 3\n');
+  await page.click('#load-btn');
+  await page.waitForTimeout(100);
+  await waitReady();
+  o = await run('nine');
+  check('a file can import another file', o.includes('9'), o);
+
+  // Restart keeps the loaded file.
+  await page.click('#restart-btn');
+  await page.waitForTimeout(200);
+  await waitReady(60000);
+  await page.waitForTimeout(500);
+  await waitReady(60000);
+  o = await run('nine');
+  check('Restart reloads the loaded file', o.includes('9'), o);
+
+  // The runtime dying (as on a native stack overflow) is recovered from.
+  const depthBefore = await page.evaluate(() => window.__repl.depth);
+  await page.evaluate(() => window.__repl.crash('RangeError: Maximum call stack size exceeded'));
+  await page.waitForTimeout(200);
+  await waitReady(60000);
+  await page.waitForTimeout(500);
+  await waitReady(60000);
+  o = await run('nine');
+  check('recovers from a runtime crash and reloads', o.includes('9'), o);
+  const depthAfter = await page.evaluate(() => window.__repl.depth);
+  check('a native stack overflow lowers the depth limit', depthAfter < depthBefore, depthBefore + ' -> ' + depthAfter);
+
+  // Files persist across reloads.
+  await page.waitForTimeout(600);
+  await page.reload();
+  await waitReady();
+  const names = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('ghci.files'))));
+  check('files persist', names.includes('Helpers.hs') && names.includes('Intro.hs'), names.join(','));
+  check('current file persists', (await page.textContent('#file-name')) === 'Intro.hs');
+
+  // Import from device.
+  fs.writeFileSync('/tmp/lab 3.hs', 'module Lab3 where\nanswer = 42\n');
+  await page.setInputFiles('#file-input', '/tmp/lab 3.hs');
+  await page.waitForTimeout(300);
+  check('import renames to a valid module file', (await page.textContent('#file-name')) === 'Lab3.hs');
+
+  // Font size and theme.
+  const fs1 = await page.$eval('#output', (el) => getComputedStyle(el).fontSize);
+  await page.click('#font-up');
+  const fs2 = await page.$eval('#output', (el) => getComputedStyle(el).fontSize);
+  check('font size increases', parseFloat(fs2) > parseFloat(fs1), fs1 + ' -> ' + fs2);
+
+  await page.screenshot({ path: process.env.SHOT || '/tmp/ghci-ipad.png' });
+  check('no uncaught page errors', pageErrors.length === 0, pageErrors.join('; '));
+} catch (e) {
+  failures++;
+  console.log('FAIL exception', e.message);
+  console.log((await output().catch(() => '')).slice(-1500));
+  await page.screenshot({ path: '/tmp/ghci-fail.png' }).catch(() => {});
+} finally {
+  await browser.close();
+  server.close();
+}
+console.log(failures ? `${failures} failure(s)` : 'all passed');
+process.exit(failures ? 1 : 0);

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Haskell">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="theme-color" content="#f7f7f5">
+  <title>Haskell REPL</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header id="toolbar">
+      <div class="group">
+        <button id="files-btn" class="btn" title="Files">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+          <span>Files</span>
+        </button>
+        <button id="file-name" class="file-name" title="Rename file"></button>
+        <span id="save-state" class="save-state"></span>
+      </div>
+      <div class="group">
+        <button id="load-btn" class="btn primary" title="Load file into the REPL (⌘↵)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" class="fill"/></svg>
+          <span>Load</span>
+        </button>
+        <button id="stop-btn" class="btn danger" title="Stop the running expression (Ctrl-C)" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" class="fill"/></svg>
+          <span>Stop</span>
+        </button>
+        <button id="restart-btn" class="btn" title="Restart the interpreter">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>
+          <span>Restart</span>
+        </button>
+      </div>
+      <div class="group">
+        <button id="font-down" class="btn icon" title="Smaller text (⌘−)">A−</button>
+        <button id="font-up" class="btn icon" title="Larger text (⌘+)">A+</button>
+        <button id="theme-btn" class="btn icon" title="Light / dark">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" class="fill"/></svg>
+        </button>
+        <div class="segmented" role="group" aria-label="Layout">
+          <button data-layout="editor" title="Editor only">Code</button>
+          <button data-layout="split" title="Editor and REPL">Both</button>
+          <button data-layout="console" title="REPL only">REPL</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="panes" data-layout="split">
+      <section id="editor-pane" class="pane">
+        <div id="editor"></div>
+      </section>
+      <section id="console-pane" class="pane">
+        <div class="pane-bar">
+          <span id="status" class="status starting">Starting…</span>
+          <span class="spacer"></span>
+          <button id="clear-btn" class="btn small" title="Clear the REPL output (⌘K)">Clear</button>
+        </div>
+        <div id="output" aria-live="polite"></div>
+        <form id="input-row" autocomplete="off">
+          <span id="prompt" class="prompt">λ&gt;</span>
+          <input id="input" type="text" enterkeyhint="send" autocomplete="off" autocorrect="off"
+                 autocapitalize="off" spellcheck="false" aria-label="REPL input">
+        </form>
+      </section>
+    </main>
+
+    <div id="keys" class="keys" aria-label="Haskell symbols"></div>
+  </div>
+
+  <div id="files-sheet" class="sheet" hidden>
+    <div class="sheet-card" role="dialog" aria-label="Files">
+      <div class="sheet-head">
+        <h2>Files</h2>
+        <button class="btn small" data-close>Done</button>
+      </div>
+      <ul id="file-list"></ul>
+      <div class="sheet-actions">
+        <button id="new-file" class="btn">New file</button>
+        <button id="import-file" class="btn">Open from device…</button>
+        <button id="export-file" class="btn">Save copy to device…</button>
+      </div>
+      <p class="hint">Files are kept inside this app automatically. Use <b>Open from device</b> to bring in .hs files from the Files app, and <b>Save copy to device</b> to put the current file into Files, AirDrop it, or email it.</p>
+      <p class="hint version" id="version"></p>
+    </div>
+  </div>
+  <input id="file-input" type="file" multiple hidden>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
