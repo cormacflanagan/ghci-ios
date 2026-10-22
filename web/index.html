@@ -45,6 +45,9 @@
         </button>
       </div>
       <div class="group">
+        <button id="ink-btn" class="btn icon" title="Draw with Apple Pencil, stylus or mouse" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 7l3 3"/></svg>
+        </button>
         <button id="font-down" class="btn icon" title="Smaller text (⌘−)">A−</button>
         <button id="font-up" class="btn icon" title="Larger text (⌘+)">A+</button>
         <button id="theme-btn" class="btn icon" title="Light / dark">
@@ -59,6 +62,16 @@
     </header>
 
     <main id="panes" data-layout="split">
+      <canvas id="ink" aria-hidden="true"></canvas>
+      <div id="ink-bar" class="ink-bar" hidden>
+        <button data-color="#e5322d" style="--c:#e5322d" title="Red"></button>
+        <button data-color="#1e6fd9" style="--c:#1e6fd9" title="Blue"></button>
+        <button data-color="#1f9d55" style="--c:#1f9d55" title="Green"></button>
+        <button data-color="#f08c00" style="--c:#f08c00" title="Orange"></button>
+        <button data-tool="erase" class="text" title="Eraser">Erase</button>
+        <button data-action="fade" class="text" title="Ink disappears after a few seconds">Fade</button>
+        <button data-action="clear" class="text" title="Remove all ink">Clear</button>
+      </div>
       <section id="editor-pane" class="pane">
         <div id="editor"></div>
       </section>

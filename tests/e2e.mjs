@@ -98,6 +98,7 @@ try {
   check('shows Running while busy', (await status()) === 'Running…');
   await page.click('#stop-btn');
   await waitReady(15000);
+  await page.waitForFunction(() => /user interrupt|restarted/.test(document.querySelector('#output').innerText), null, { timeout: 5000 }).catch(() => {});
   o = await output();
   check('Stop interrupts a loop', /user interrupt|restarted/.test(o), o.slice(-200));
   o = await run('1 + 1');
@@ -193,6 +194,59 @@ try {
   await page.click('#font-up');
   const fs2 = await page.$eval('#output', (el) => getComputedStyle(el).fontSize);
   check('font size increases', parseFloat(fs2) > parseFloat(fs1), fs1 + ' -> ' + fs2);
+
+  // Ink: Pencil and mouse draw over the panes without clicking through.
+  const inkPixels = () => page.evaluate(() => {
+    const c = document.querySelector('#ink');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i]) n++;
+    return n;
+  });
+  const penStroke = (x0, y0, x1, y1) => page.evaluate(([x0, y0, x1, y1]) => {
+    const target = document.elementFromPoint(x0, y0);
+    const ev = (type, x, y) => new PointerEvent(type, {
+      bubbles: true, cancelable: true, composed: true, pointerId: 7, pointerType: 'pen',
+      clientX: x, clientY: y, pressure: 0.6, button: 0, buttons: type === 'pointerup' ? 0 : 1,
+    });
+    target.dispatchEvent(ev('pointerdown', x0, y0));
+    for (let i = 1; i <= 10; i++) target.dispatchEvent(ev('pointermove', x0 + (x1 - x0) * i / 10, y0 + (y1 - y0) * i / 10));
+    target.dispatchEvent(ev('pointerup', x1, y1));
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: x1, clientY: y1 }));
+  }, [x0, y0, x1, y1]);
+  await page.click('#ink-btn');
+  check('ink palette appears', await page.isVisible('#ink-bar'));
+  const docBefore = await page.evaluate(() => window.__editor.getText());
+  const ed = await page.$eval('#editor', (el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top }; });
+  await penStroke(ed.x + 100, ed.y + 100, ed.x + 300, ed.y + 160);
+  await page.waitForTimeout(100);
+  check('pencil draws', (await inkPixels()) > 100);
+  check('pencil stroke does not edit the code', (await page.evaluate(() => window.__editor.getText())) === docBefore);
+  await page.mouse.move(ed.x + 100, ed.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(ed.x + 250, ed.y + 350, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(100);
+  check('mouse draws in ink mode', (await page.evaluate(() => window.__ink.strokeCount())) === 2);
+  await page.click('#ink-bar [data-tool="erase"]');
+  await penStroke(ed.x + 150, ed.y + 300, ed.x + 250, ed.y + 360);
+  await page.waitForTimeout(100);
+  check('eraser removes a stroke', (await page.evaluate(() => window.__ink.strokeCount())) === 1);
+  await page.click('#ink-bar [data-action="clear"]');
+  await page.waitForTimeout(100);
+  check('clear removes all ink', (await inkPixels()) === 0);
+  await page.click('#ink-bar [data-color="#1e6fd9"]');
+  await page.click('#ink-bar [data-action="fade"]');
+  await penStroke(ed.x + 100, ed.y + 100, ed.x + 300, ed.y + 160);
+  await page.waitForTimeout(200);
+  const shown = await inkPixels();
+  await page.waitForTimeout(3600);
+  check('fading ink disappears', shown > 100 && (await inkPixels()) === 0, `${shown}`);
+  await page.click('#ink-bar [data-action="fade"]');
+  await page.click('#ink-btn');
+  check('ink off hides the palette', !(await page.isVisible('#ink-bar')));
+  o = await run('1 + 2');
+  check('REPL still works after drawing', o.includes('3'), o);
 
   // Share: the QR code appears, and the link opens the file elsewhere.
   await page.click('#files-btn');

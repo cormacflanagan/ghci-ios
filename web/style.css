@@ -240,6 +240,46 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   padding: 6px 0;
 }
 
+/* ---------- ink ---------- */
+#panes { position: relative; }
+#ink { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 5; }
+.ink-bar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.ink-bar[hidden] { display: none; }
+.ink-bar button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid var(--panel);
+  background: var(--c);
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.ink-bar button.text {
+  width: auto;
+  padding: 0 12px;
+  border-radius: 18px;
+  background: var(--btn);
+  font-size: 15px;
+  font-weight: 600;
+}
+.ink-bar button[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--accent); }
+.ink-bar button.text[aria-pressed="true"] { background: var(--accent); color: #fff; box-shadow: none; }
+#ink-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
 /* ---------- files sheet ---------- */
 .sheet {
   position: fixed;

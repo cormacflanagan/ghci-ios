@@ -33,6 +33,12 @@ Always use the Home Screen app. Safari tabs keep their own separate file storage
   camera and get a copy of the file in their own browser, loaded and ready
   to run. The file travels inside the link itself (no server). Very large
   files fall back to Copy link / Send link.
+- **Pen** (✎) turns on drawing for lecturing. The Apple Pencil (or a stylus
+  or mouse) draws over the editor and REPL while fingers keep typing,
+  tapping and scrolling. The palette has colours, Erase, Fade (ink vanishes
+  after a few seconds) and Clear. Ink is on the screen only and does not
+  change files. It stays where you drew it if the code scrolls. If iPadOS
+  Scribble interferes, turn it off in Settings → Apple Pencil.
 - A− / A+ (⌘− / ⌘+) change the text size. ◐ switches between light and dark.
   Code / Both / REPL choose the layout.
 - ↑/↓ (hardware keyboard) step through REPL history.

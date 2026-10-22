@@ -1,6 +1,7 @@
 import { createEditor, unsmart } from './vendor/editor.js';
 import { Repl, probeDepth } from './repl.js';
 import { makeFragment, readFragment, qrSvg } from './vendor/share.js';
+import { setupInk } from './ink.js';
 
 const APP_VERSION = '1.0.0';
 // Identifies the interpreter build; the stack calibration is redone when it changes.
@@ -839,6 +840,14 @@ function init() {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
+  window.__ink = setupInk({
+    panes: $('#panes'),
+    canvas: $('#ink'),
+    bar: $('#ink-bar'),
+    button: $('#ink-btn'),
+    settings,
+    save: () => store.set('ghci.settings', settings),
+  });
   window.__repl = repl;   // for tests and debugging
   window.__editor = editor;
   write('Haskell REPL (MicroHs). Type an expression below, or tap Load to load the file in the editor.\n', 'sys');
