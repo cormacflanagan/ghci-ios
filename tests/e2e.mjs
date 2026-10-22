@@ -228,6 +228,24 @@ try {
   await page.mouse.up();
   await page.waitForTimeout(100);
   check('mouse draws in ink mode', (await page.evaluate(() => window.__ink.strokeCount())) === 2);
+  // Ink drawn on the code moves with it.
+  const inkTop = () => page.evaluate(() => {
+    const c = document.querySelector('#ink');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i]) return Math.floor((i >> 2) / c.width);
+    return -1;
+  });
+  await page.evaluate(() => window.__editor.view.dispatch({ changes: { from: 0, insert: '\n'.repeat(80) } }));
+  await page.evaluate(() => window.__editor.view.scrollDOM.scrollTop = 0);
+  await page.waitForTimeout(100);
+  const top0 = await inkTop();
+  await page.evaluate(() => { window.__editor.view.scrollDOM.scrollTop = 120; });
+  await page.waitForTimeout(150);
+  const top1 = await inkTop();
+  check('ink scrolls with the code', top0 > 0 && (top1 === -1 || top0 - top1 > 100), `${top0} -> ${top1}`);
+  await page.evaluate(() => { window.__editor.view.scrollDOM.scrollTop = 0; });
+  await page.evaluate((t) => window.__editor.setText(t), docBefore);
+  await page.waitForTimeout(100);
   await page.click('#ink-bar [data-tool="erase"]');
   await penStroke(ed.x + 150, ed.y + 300, ed.x + 250, ed.y + 360);
   await page.waitForTimeout(100);

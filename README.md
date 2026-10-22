@@ -37,7 +37,8 @@ Always use the Home Screen app. Safari tabs keep their own separate file storage
   or mouse) draws over the editor and REPL while fingers keep typing,
   tapping and scrolling. The palette has colours, Erase, Fade (ink vanishes
   after a few seconds) and Clear. Ink is on the screen only and does not
-  change files. It stays where you drew it if the code scrolls. If iPadOS
+  change files. Ink drawn on code or REPL output scrolls with it, scales with
+  the text size, and belongs to that file (it hides when you switch files). If iPadOS
   Scribble interferes, turn it off in Settings → Apple Pencil.
 - A− / A+ (⌘− / ⌘+) change the text size. ◐ switches between light and dark.
   Code / Both / REPL choose the layout.

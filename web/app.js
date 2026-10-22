@@ -233,6 +233,7 @@ function showLocation(name, line, col) {
 }
 
 function clearOutput() {
+  if (window.__ink) window.__ink.clearArea('output');
   outEl.textContent = '';
   curLine = null;
   inError = false;
@@ -442,6 +443,7 @@ function openFile(name) {
   $('#file-name').textContent = name;
   saveFiles();
   renderFileList();
+  if (window.__ink) window.__ink.refresh();
 }
 
 function newFile() {
@@ -669,6 +671,7 @@ function applySettings() {
     b.setAttribute('aria-pressed', String(b.dataset.layout === settings.layout));
   }
   store.set('ghci.settings', settings);
+  if (window.__ink) window.__ink.refresh();
 }
 
 function setFont(delta) {
@@ -847,6 +850,7 @@ function init() {
     button: $('#ink-btn'),
     settings,
     save: () => store.set('ghci.settings', settings),
+    currentFile: () => current,
   });
   window.__repl = repl;   // for tests and debugging
   window.__editor = editor;
