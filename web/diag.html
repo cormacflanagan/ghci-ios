@@ -19,7 +19,7 @@
 </head>
 <body>
 <h1>Speed diagnostics</h1>
-<p>Takes about 30 seconds. Keep this page in front while it runs, then take a screenshot.</p>
+<p>Takes about a minute. Keep this page in front while it runs, then take a screenshot.</p>
 <button id="run">Run</button>
 <table>
   <thead><tr><th>Test</th><th>This device</th><th>Reference (server)</th></tr></thead>
@@ -91,7 +91,7 @@ function repl() {
   };
   const prompt = () => new Promise((r) => { if (out.endsWith('λ> ')) { const o = out; out = ''; r(o); } else waiter = r; });
   const send = (line) => { const p = prompt(); w.postMessage({ type: 'input', text: line + '\n' }); return p; };
-  return { prompt, send, stop: () => w.terminate() };
+  return { prompt, send, post: (m) => w.postMessage(m), stop: () => w.terminate() };
 }
 
 async function run() {
@@ -116,12 +116,34 @@ async function run() {
   row('length (filter even [1..100000]): total', Math.round(performance.now() - t) + ' ms');
   const m = o.match(/\((\d+)ms \(elapsed\)/);
   row('… of which evaluation (:set +s)', m ? m[1] + ' ms' : '?');
-  for (const n of ['2nd', '3rd']) {
+  const evalMs = async () => {
     const o2 = await r.send('length (filter even [1..100000])');
     const m2 = o2.match(/\((\d+)ms \(elapsed\)/);
-    row(`Same, ${n} run (evaluation)`, m2 ? m2[1] + ' ms' : '?');
-  }
+    return m2 ? m2[1] + ' ms' : '?';
+  };
+  for (const n of ['2nd', '3rd']) row(`Same, ${n} run (evaluation)`, await evalMs());
+
+  // Now do, one at a time, what the app does differently.
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('ghci.depth')); } catch (e) { /* none */ }
+  const depth = saved && saved.depth ? saved.depth : 800;
+  r.post({ type: 'depth', n: depth });
+  row(`A. With the app's recursion limit (${depth})`, await evalMs());
+  await new Promise((res) => setTimeout(res, 10000));
+  row('B. After 10 s idle', await evalMs());
+  r.post({ type: 'write', path: 'Intro.hs', text: 'module Intro where\ndouble :: Int -> Int\ndouble x = 2 * x\n' });
+  await r.send(':clear');
+  await r.send(':reload');
+  await r.send('import Intro');
+  await r.send(':set +s');
+  row('C. After loading a file', await evalMs());
+  const { probeDepth } = await import('./repl.js');
+  const probes = Promise.all([probeDepth(1000), probeDepth(4000)]);
+  row('D. While stack probes run', await evalMs());
+  await probes;
+  row('E. After stack probes finished', await evalMs());
   r.stop();
+  row('Saved stack calibration', saved ? `${saved.depth} (max ${saved.max})` : 'none');
 
   document.getElementById('info').textContent =
     'heap: ' + (heap || 'default') + '\n' + navigator.userAgent + '\ncores: ' + (navigator.hardwareConcurrency || '?') +
