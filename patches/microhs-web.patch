@@ -1,8 +1,38 @@
 diff --git a/src/MicroHs/Interactive.hs b/src/MicroHs/Interactive.hs
-index d20c36eb..bd6da169 100644
+index d20c36eb..59ca8edc 100644
 --- a/src/MicroHs/Interactive.hs
 +++ b/src/MicroHs/Interactive.hs
-@@ -188,7 +188,11 @@ commands =
+@@ -151,17 +151,27 @@ repl = do
+       case s of
+         [] -> repl
+         ':':r -> do
+-          c <- command r
++          c <- safely True (command r)
+           if c then repl else bye
+         _ -> do
+           t1 <- liftIO getTimeMilli
+-          oneline s
++          safely () (oneline s)
+           t2 <- liftIO getTimeMilli
+           cstat <- gets isCompStats
+           when cstat $
+             putStrLnI $ "(" ++ show (t2 - t1) ++ "ms compile)"
+           repl
+ 
++-- Report an exception that escapes handling a line, instead of letting it
++-- end the REPL.  (E.g., an interrupt that arrives just as an evaluation
++-- finishes is delivered while the next line is compiled.)
++safely :: a -> I a -> I a
++safely dflt act = do
++  r <- trySIO act
++  case r of
++    Left e  -> do err e; return dflt
++    Right a -> return a
++
+ command :: String -> I Bool
+ command s = do
+   let fw = (!!0) . words . fst
+@@ -188,7 +198,11 @@ commands =
      )
    , ("clear       clear all definitions", const $ do
        updateLines (const preamble)
@@ -293,3 +323,43 @@ index 420b9014..58101fb4 100644
    gc();
    gc();                         /* this finds some more GC reductions */
    want_gc_red = 0;              /* can be enabled, but it is rarely a win */
+diff --git a/src/runtime/unix/extra.c b/src/runtime/unix/extra.c
+index 51672f10..a7231b48 100644
+--- a/src/runtime/unix/extra.c
++++ b/src/runtime/unix/extra.c
+@@ -92,8 +92,10 @@ yield_extra(void)
+ {
+   static double last;
+   double now = emscripten_get_now();
+-  if (!is_drawing && (now - last) > 32) {
+-    /* Only do this a few time a second.  If done too often JS will enforce a minimum 4ms delay. */
++  if (!is_drawing && (now - last) > 200) {
++    /* Pause so the worker can receive messages (input, Stop).  Each pause
++     * costs at least 4ms, and much more where the browser throttles timers,
++     * so only do it a few times a second. */
+     last = now;
+     emscripten_sleep(0);
+   }
+@@ -177,7 +179,22 @@ getraw(void)
+  * Get a raw input character.
+  * If undefined, the default always returns -1
+  */
++#if defined(USE_WEB_INPUT)
++extern volatile bool has_sigint;
++/* The REPL reads its input lines here.  A Stop that arrived after the
++ * evaluation had already finished must not interrupt what runs next
++ * (compiling the next line, outside the REPL's exception handler), which
++ * would kill the REPL. */
++static int
++getraw_repl(void)
++{
++  has_sigint = 0;
++  return getraw();
++}
++#define GETRAW getraw_repl
++#else  /* USE_WEB_INPUT */
+ #define GETRAW getraw
++#endif  /* USE_WEB_INPUT */
+ 
+ /*
+  * Get time since some epoch in milliseconds.

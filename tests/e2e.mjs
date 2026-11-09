@@ -88,7 +88,7 @@ try {
   }
 
   // Runaway evaluation: Stop interrupts it.
-  await setEditor('module Intro where\n\nloop :: Int -> Int\nloop n = loop (n + 1)\n');
+  await setEditor('module Intro where\n\nloop :: Int -> Int\nloop n = if n < 0 then n else loop (n + 1)\n');
   await page.click('#load-btn');
   await page.waitForTimeout(100);
   await waitReady();
