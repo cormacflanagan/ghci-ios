@@ -35,8 +35,10 @@ const REF = {
   'Plain JavaScript loop': '177 ms',
   'Interpreter start': '1600 ms',
   'Evaluate 1 + 1': '260 ms',
-  'length (filter even [1..100000]): total': '1250 ms',
-  '… of which evaluation (:set +s)': '995 ms',
+  'length (filter even [1..100000]): total': '1500 ms',
+  '… of which evaluation (:set +s)': '1080 ms',
+  'Same, 2nd run (evaluation)': '1150 ms',
+  'Same, 3rd run (evaluation)': '1150 ms',
 };
 function row(name, value) {
   const tr = document.createElement('tr');
@@ -73,8 +75,9 @@ function probe() {
 }
 
 // Drive the real interpreter worker.
+const heap = new URLSearchParams(location.search).get('heap');
 function repl() {
-  const w = new Worker('worker.js');
+  const w = new Worker('worker.js' + (heap ? '?heap=' + heap : ''));
   const dec = new TextDecoder();
   let out = '';
   let waiter = null;
@@ -113,10 +116,15 @@ async function run() {
   row('length (filter even [1..100000]): total', Math.round(performance.now() - t) + ' ms');
   const m = o.match(/\((\d+)ms \(elapsed\)/);
   row('… of which evaluation (:set +s)', m ? m[1] + ' ms' : '?');
+  for (const n of ['2nd', '3rd']) {
+    const o2 = await r.send('length (filter even [1..100000])');
+    const m2 = o2.match(/\((\d+)ms \(elapsed\)/);
+    row(`Same, ${n} run (evaluation)`, m2 ? m2[1] + ' ms' : '?');
+  }
   r.stop();
 
   document.getElementById('info').textContent =
-    navigator.userAgent + '\ncores: ' + (navigator.hardwareConcurrency || '?') +
+    'heap: ' + (heap || 'default') + '\n' + navigator.userAgent + '\ncores: ' + (navigator.hardwareConcurrency || '?') +
     '\nWebAssembly: ' + (typeof WebAssembly) + '\n' + new Date().toISOString();
   document.getElementById('run').disabled = false;
 }

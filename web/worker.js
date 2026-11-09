@@ -10,8 +10,14 @@
 'use strict';
 
 const HOME = '/home/web_user';
+// Heap size in cells (8 bytes each).  64MB is plenty for class examples;
+// a larger heap made iPads several times slower once it had been filled,
+// presumably because iOS compresses the memory of a tab that holds that much.
 // worker.js?small runs with a small heap; used to probe the stack limit.
-const SMALL = self.location.search.includes('small');
+// worker.js?heap=16M picks another size, for experiments.
+const params = new URLSearchParams(self.location.search);
+const SMALL = params.has('small');
+const HEAP = SMALL ? '6M' : (params.get('heap') || '8M');
 const RC = ':set prompt=λ> \n';
 
 let pending = [];
@@ -74,7 +80,7 @@ function fatal(reason) {
 }
 
 self.Module = {
-  arguments: SMALL ? ['+RTS', '-H6M', '-RTS'] : [],
+  arguments: ['+RTS', '-H' + HEAP, '-RTS'],
   noExitRuntime: true,
   locateFile: (p) => 'mhs/' + p,
   preRun: [function () {
