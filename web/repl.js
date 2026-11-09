@@ -163,7 +163,10 @@ export class Repl {
 
   interrupt() {
     if (!this.worker || this.atPrompt) return;
-    this.queue = [];
+    // If the expression ends by itself just as Stop arrives, the interrupt
+    // stays pending and would hit the next command; let a hidden no-op
+    // command take it.
+    this.queue = [{ line: '()', silent: true }];
     this.post({ type: 'input', text: '\x03' });
     clearTimeout(this.stopTimer);
     const gen = this.generation;
