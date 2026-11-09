@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REPL Diagnostics</title>
+<style>
+  :root { --bg: #f7f7f5; --fg: #1d1d1b; --muted: #6b6b66; --border: #d9d9d3; --accent: #5b3cc4; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #161618; --fg: #ececec; --muted: #9a9aa2; --border: #36363b; --accent: #b9a6ff; } }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 17px -apple-system, system-ui, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  p { color: var(--muted); margin: 4px 0 12px; }
+  button { font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; }
+  table { border-collapse: collapse; margin-top: 16px; width: 100%; max-width: 760px; }
+  td, th { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  td.n { font-family: ui-monospace, Menlo, monospace; white-space: nowrap; }
+  pre { white-space: pre-wrap; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>Speed diagnostics</h1>
+<p>Takes about 30 seconds. Keep this page in front while it runs, then take a screenshot.</p>
+<button id="run">Run</button>
+<table>
+  <thead><tr><th>Test</th><th>This device</th><th>Reference (server)</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<pre id="info"></pre>
+<script>
+'use strict';
+const rows = document.getElementById('rows');
+const REF = {
+  'Timer pause, setTimeout(0)': '3.7 ms',
+  'Message pause': '0.04 ms',
+  'Plain JavaScript loop': '177 ms',
+  'Interpreter start': '1600 ms',
+  'Evaluate 1 + 1': '260 ms',
+  'length (filter even [1..100000]): total': '1250 ms',
+  '… of which evaluation (:set +s)': '995 ms',
+};
+function row(name, value) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td></td><td class="n"></td><td class="n"></td>`;
+  tr.children[0].textContent = name;
+  tr.children[1].textContent = value;
+  tr.children[2].textContent = REF[name] || '';
+  rows.appendChild(tr);
+}
+
+// Timer and CPU tests, run inside a worker like the interpreter is.
+const probeSrc = `
+onmessage = async () => {
+  const N = 50;
+  let t = performance.now();
+  for (let i = 0; i < N; i++) await new Promise((r) => setTimeout(r, 0));
+  const timer = (performance.now() - t) / N;
+  t = performance.now();
+  for (let i = 0; i < N; i++) await new Promise((r) => { const c = new MessageChannel(); c.port1.onmessage = r; c.port2.postMessage(0); });
+  const msg = (performance.now() - t) / N;
+  t = performance.now();
+  let x = 0;
+  for (let i = 0; i < 3e7; i++) x = (x * 31 + i) | 0;
+  const cpu = performance.now() - t;
+  postMessage({ timer, msg, cpu, x });
+};`;
+
+function probe() {
+  return new Promise((resolve) => {
+    const w = new Worker(URL.createObjectURL(new Blob([probeSrc], { type: 'text/javascript' })));
+    w.onmessage = (e) => { w.terminate(); resolve(e.data); };
+    w.postMessage(0);
+  });
+}
+
+// Drive the real interpreter worker.
+function repl() {
+  const w = new Worker('worker.js');
+  const dec = new TextDecoder();
+  let out = '';
+  let waiter = null;
+  w.onmessage = (e) => {
+    if (e.data.type === 'out') {
+      out += dec.decode(e.data.bytes, { stream: true });
+      if (out.endsWith('λ> ') && waiter) { const f = waiter; waiter = null; const o = out; out = ''; f(o); }
+    } else if (e.data.type === 'abort') {
+      row('Interpreter crashed', String(e.data.reason).slice(0, 80));
+    }
+  };
+  const prompt = () => new Promise((r) => { if (out.endsWith('λ> ')) { const o = out; out = ''; r(o); } else waiter = r; });
+  const send = (line) => { const p = prompt(); w.postMessage({ type: 'input', text: line + '\n' }); return p; };
+  return { prompt, send, stop: () => w.terminate() };
+}
+
+async function run() {
+  document.getElementById('run').disabled = true;
+  rows.textContent = '';
+  const p = await probe();
+  row('Timer pause, setTimeout(0)', p.timer.toFixed(1) + ' ms');
+  row('Message pause', p.msg.toFixed(2) + ' ms');
+  row('Plain JavaScript loop', Math.round(p.cpu) + ' ms');
+
+  let t = performance.now();
+  const r = repl();
+  await r.prompt();
+  await r.send('()');
+  row('Interpreter start', Math.round(performance.now() - t) + ' ms');
+  t = performance.now();
+  await r.send('1 + 1');
+  row('Evaluate 1 + 1', Math.round(performance.now() - t) + ' ms');
+  await r.send(':set +s');
+  t = performance.now();
+  const o = await r.send('length (filter even [1..100000])');
+  row('length (filter even [1..100000]): total', Math.round(performance.now() - t) + ' ms');
+  const m = o.match(/\((\d+)ms \(elapsed\)/);
+  row('… of which evaluation (:set +s)', m ? m[1] + ' ms' : '?');
+  r.stop();
+
+  document.getElementById('info').textContent =
+    navigator.userAgent + '\ncores: ' + (navigator.hardwareConcurrency || '?') +
+    '\nWebAssembly: ' + (typeof WebAssembly) + '\n' + new Date().toISOString();
+  document.getElementById('run').disabled = false;
+}
+document.getElementById('run').addEventListener('click', run);
+</script>
+</body>
+</html>
