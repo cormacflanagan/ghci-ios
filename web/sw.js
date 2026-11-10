@@ -1,7 +1,7 @@
 // Offline support.  Pages come from the network when it answers quickly;
 // other files come from the cache, which is refreshed in the background so
 // the next launch picks up a new version.
-const CACHE = 'haskell-repl-v13';
+const CACHE = 'haskell-repl-v14';
 const ASSETS = [
   './', 'index.html', 'style.css', 'app.js', 'repl.js', 'ink.js', 'worker.js',
   'vendor/editor.js', 'vendor/share.js', 'mhs/mhs.js', 'mhs/mhs.wasm',
@@ -30,7 +30,7 @@ self.addEventListener('fetch', (e) => {
     if (req.mode === 'navigate') {
       try {
         const res = await Promise.race([
-          fetch(req),
+          fetch(req, { cache: 'no-cache' }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('slow')), 4000)),
         ]);
         if (res.ok) cache.put(req, res.clone());
@@ -38,11 +38,11 @@ self.addEventListener('fetch', (e) => {
       } catch (err) {
         const cached = await cache.match(req, { ignoreSearch: true });
         if (cached) return cached;
-        return fetch(req);
+        return fetch(req, { cache: 'no-cache' });
       }
     }
     const cached = await cache.match(req, { ignoreSearch: true });
-    const fresh = fetch(req).then((res) => {
+    const fresh = fetch(req, { cache: 'no-cache' }).then((res) => {
       if (res.ok && !res.redirected) cache.put(req, res.clone());
       return res;
     }).catch(() => null);
