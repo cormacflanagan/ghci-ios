@@ -19,7 +19,7 @@
 </head>
 <body>
 <h1>Speed diagnostics</h1>
-<p>Takes about a minute. Keep this page in front while it runs, then take a screenshot.</p>
+<p>Takes about two minutes. Keep this page in front while it runs, then take a screenshot.</p>
 <button id="run">Run</button>
 <table>
   <thead><tr><th>Test</th><th>This device</th><th>Reference (server)</th></tr></thead>
@@ -94,6 +94,43 @@ function repl() {
   return { prompt, send, post: (m) => w.postMessage(m), stop: () => w.terminate() };
 }
 
+// Load index.html in a visible frame and time the example three times there.
+async function appRuns(query) {
+  const f = document.createElement('iframe');
+  f.style.cssText = 'width: 100%; height: 500px; border: 1px solid #999; margin-top: 12px;';
+  f.src = 'index.html' + (query ? '?' + query : '');
+  document.body.appendChild(f);
+  const until = async (pred, ms = 60000) => {
+    const t = performance.now();
+    while (performance.now() - t < ms) {
+      try { if (pred()) return true; } catch (e) { /* not loaded yet */ }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return false;
+  };
+  const w = () => f.contentWindow;
+  const ready = () => w().document.querySelector('#status').textContent === 'Ready';
+  const results = [];
+  if (!(await until(ready, 90000))) { f.remove(); return ['did not start']; }
+  const send = async (line) => {
+    const d = w().document;
+    d.querySelector('#input').value = line;
+    d.querySelector('#input-row').requestSubmit();
+    await new Promise((r) => setTimeout(r, 100));
+    await until(ready, 60000);
+    await new Promise((r) => setTimeout(r, 300));
+  };
+  await send(':set +s');
+  for (let i = 0; i < 3; i++) {
+    await send('length (filter even [1..100000])');
+    const all = w().document.querySelector('#output').innerText.match(/\((\d+)ms \(elapsed\)/g) || [];
+    const last = all[all.length - 1];
+    results.push(last ? last.match(/\d+/)[0] + ' ms' : '?');
+  }
+  f.remove();
+  return results;
+}
+
 async function run() {
   document.getElementById('run').disabled = true;
   rows.textContent = '';
@@ -143,6 +180,12 @@ async function run() {
   await probes;
   row('E. After stack probes finished', await evalMs());
   r.stop();
+
+  // The real app, in a frame on this page, with parts switched off.
+  for (const [label, q] of [['F. Full app', ''], ['G. App without drawing layer', 'noink'],
+                            ['H. App without viewport handling', 'novv'], ['I. App without both', 'noink&novv']]) {
+    row(label + ' (3 runs)', (await appRuns(q)).join(', '));
+  }
   row('Saved stack calibration', saved ? `${saved.depth} (max ${saved.max})` : 'none');
 
   document.getElementById('info').textContent =

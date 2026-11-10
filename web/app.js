@@ -820,16 +820,20 @@ function init() {
     else if (e.key === '.' && e.metaKey) { e.preventDefault(); repl.interrupt(); }
   });
 
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', fitViewport);
-    window.visualViewport.addEventListener('scroll', fitViewport);
+  // ?novv and ?noink switch parts off, for diag.html to find slowdowns.
+  const debugFlags = new URLSearchParams(location.search);
+  if (!debugFlags.has('novv')) {
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', fitViewport);
+      window.visualViewport.addEventListener('scroll', fitViewport);
+    }
+    window.addEventListener('resize', fitSoon);
+    window.addEventListener('orientationchange', fitSoon);
+    window.addEventListener('scroll', fitViewport);
+    document.addEventListener('focusin', fitSoon);
+    document.addEventListener('focusout', fitSoon);
+    fitViewport();
   }
-  window.addEventListener('resize', fitSoon);
-  window.addEventListener('orientationchange', fitSoon);
-  window.addEventListener('scroll', fitViewport);
-  document.addEventListener('focusin', fitSoon);
-  document.addEventListener('focusout', fitSoon);
-  fitViewport();
 
   const flush = () => { if (dirty) saveFiles(); };
   window.addEventListener('pagehide', flush);
@@ -843,7 +847,7 @@ function init() {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
-  window.__ink = setupInk({
+  if (!debugFlags.has('noink')) window.__ink = setupInk({
     panes: $('#panes'),
     canvas: $('#ink'),
     bar: $('#ink-bar'),
