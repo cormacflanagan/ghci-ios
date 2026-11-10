@@ -5,7 +5,7 @@ import { setupInk } from './ink.js';
 
 const APP_VERSION = '1.0.0';
 // Identifies the interpreter build; the stack calibration is redone when it changes.
-const ENGINE = 'mhs-0.16.11.0-web1';
+const ENGINE = 'mhs-0.16.11.0-web2';
 
 const $ = (sel) => document.querySelector(sel);
 

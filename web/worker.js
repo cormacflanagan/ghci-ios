@@ -52,6 +52,7 @@ const inputQueue = [];
 function sendInput(text) {
   const bytes = new TextEncoder().encode(text);
   for (const b of bytes) Module._set_input_char(b);
+  if (Module.wakeInput) Module.wakeInput();   // the REPL may be asleep waiting for input
 }
 
 self.onmessage = (ev) => {

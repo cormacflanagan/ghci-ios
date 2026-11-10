@@ -74,6 +74,10 @@ The patch:
 - bounds nested evaluation depth
 - keeps `setjmp` out of the evaluator's hot path
 - makes `:clear` keep the embedded base package
+- has the REPL sleep until input arrives, instead of polling 100 times a second
+- keeps the REPL running if a Stop arrives just as an evaluation ends
+- pads the evaluator past 100 KB so Safari never tries to optimize it, which
+  took minutes of CPU and made iPads several times slower
 
 After changing app files, bump `CACHE` in `web/sw.js` so installed apps pick up
 the new version.

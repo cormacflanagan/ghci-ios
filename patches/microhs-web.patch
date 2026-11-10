@@ -114,7 +114,7 @@ index 2fd0d966..e163f34c 100644
  }
  
 diff --git a/src/runtime/eval.c b/src/runtime/eval.c
-index 420b9014..58101fb4 100644
+index 420b9014..d4f2f0e0 100644
 --- a/src/runtime/eval.c
 +++ b/src/runtime/eval.c
 @@ -854,16 +854,36 @@ heapoffs_t next_scan_index;
@@ -249,7 +249,47 @@ index 420b9014..58101fb4 100644
  }
  
  static INLINE
-@@ -5227,6 +5290,11 @@ evali(NODEPTR an)
+@@ -5201,7 +5264,39 @@ rnf(value_t noerr, NODEPTR n)
+   FREE(done);
+ }
+ 
++#if defined(USE_WEB_INPUT)
++/*
++ * Safari's optimizing WebAssembly compiler (OMG) takes minutes of CPU on a
++ * function the size of evali(), and on iPads evaluation became several times
++ * slower some time after starting.  Safari does not try to optimize
++ * functions larger than 100000 bytes, and its baseline compiler runs evali()
++ * well, so evali() is made larger than that: it inlines everything it calls
++ * (flatten) and contains the padding below, which never runs (web_pad is
++ * always 0, but the compiler cannot know that).
++ */
++volatile int web_pad = 0;
++volatile long web_pad_sink;
++#define WEB_PAD1(i)    case i: web_pad_sink = web_pad_sink * (i) + ((i) ^ 0x5bd1); break;
++#define WEB_PAD10(i)   WEB_PAD1(i##0) WEB_PAD1(i##1) WEB_PAD1(i##2) WEB_PAD1(i##3) WEB_PAD1(i##4) \
++                       WEB_PAD1(i##5) WEB_PAD1(i##6) WEB_PAD1(i##7) WEB_PAD1(i##8) WEB_PAD1(i##9)
++#define WEB_PAD100(i)  WEB_PAD10(i##0) WEB_PAD10(i##1) WEB_PAD10(i##2) WEB_PAD10(i##3) WEB_PAD10(i##4) \
++                       WEB_PAD10(i##5) WEB_PAD10(i##6) WEB_PAD10(i##7) WEB_PAD10(i##8) WEB_PAD10(i##9)
++#define WEB_PAD1000(i) WEB_PAD100(i##0) WEB_PAD100(i##1) WEB_PAD100(i##2) WEB_PAD100(i##3) WEB_PAD100(i##4) \
++                       WEB_PAD100(i##5) WEB_PAD100(i##6) WEB_PAD100(i##7) WEB_PAD100(i##8) WEB_PAD100(i##9)
++static inline void
++web_padding(int k)
++{
++  switch (k) {
++  WEB_PAD1000(1) WEB_PAD1000(2) WEB_PAD1000(3)
++  default: break;
++  }
++}
++#endif  /* USE_WEB_INPUT */
++
+ /* Evaluate a node, returns when the node is in WHNF. */
++#if defined(USE_WEB_INPUT)
++__attribute__((flatten))   /* see web_padding() */
++#endif  /* USE_WEB_INPUT */
+ NODEPTR
+ evali(NODEPTR an)
+ {
+@@ -5227,6 +5322,13 @@ evali(NODEPTR an)
    if (++cur_c_stack > max_c_stack)
      max_c_stack = cur_c_stack;
  #endif
@@ -257,11 +297,13 @@ index 420b9014..58101fb4 100644
 +  if (web_c_depth >= web_max_c_depth)
 +    raise_rts(exn_stackoverflow);
 +  web_c_depth++;
++  if (web_pad)
++    web_padding(web_pad);       /* never happens; see web_padding() */
 +#endif  /* USE_WEB_INPUT */
  
  /* Reset stack pointer and return. */
  #define RET do { goto ret; } while(0)
-@@ -6374,6 +6442,11 @@ evali(NODEPTR an)
+@@ -6374,6 +6476,11 @@ evali(NODEPTR an)
      CHKARG2NP;
      {
        int red = evalint(x);
@@ -273,7 +315,7 @@ index 420b9014..58101fb4 100644
        int oldred = want_gc_red;
        want_gc_red = red;
        gc();
-@@ -6585,9 +6658,19 @@ evali(NODEPTR an)
+@@ -6585,9 +6692,19 @@ evali(NODEPTR an)
        cur_handler = h;
        stackptr_t ostack = stack_ptr;;    /* old stack pointer */
        enum mask_state omask = runq.mq_head->mt_mask;     /* old mask */
@@ -293,7 +335,7 @@ index 420b9014..58101fb4 100644
          runq.mq_head->mt_mask = mask_interruptible; /* evaluate with mask */
          NODEPTR exn = h->hdl_exn;       /* exception value */
          cur_handler = h->hdl_old;       /* reset handler */
-@@ -6607,7 +6690,9 @@ evali(NODEPTR an)
+@@ -6607,7 +6724,9 @@ evali(NODEPTR an)
          GOAP2(p, q, z);
        } else {
          /* Normal execution: */
@@ -303,7 +345,7 @@ index 420b9014..58101fb4 100644
          /* No exception occurred */
          cur_handler = h->hdl_old; /* restore old handler */
          FREE(h);
-@@ -7095,6 +7180,9 @@ evali(NODEPTR an)
+@@ -7095,6 +7214,9 @@ evali(NODEPTR an)
  #if MAXSTACKDEPTH
    cur_c_stack = old_cur_c_stack; /* reset rather than counting down, in case of longjump */
  #endif
@@ -313,7 +355,7 @@ index 420b9014..58101fb4 100644
    return n;
  }
  
-@@ -7362,7 +7450,9 @@ MHS_INIT_ARGS(
+@@ -7362,7 +7484,9 @@ MHS_INIT_ARGS(
  
    /* GC unused stuff, nice for -o */
    PUSH(prog);
@@ -324,10 +366,44 @@ index 420b9014..58101fb4 100644
    gc();                         /* this finds some more GC reductions */
    want_gc_red = 0;              /* can be enabled, but it is rarely a win */
 diff --git a/src/runtime/unix/extra.c b/src/runtime/unix/extra.c
-index 51672f10..a7231b48 100644
+index 51672f10..787b55a7 100644
 --- a/src/runtime/unix/extra.c
 +++ b/src/runtime/unix/extra.c
-@@ -92,8 +92,10 @@ yield_extra(void)
+@@ -55,12 +55,23 @@ void set_input_char(int c) {
+   getraw_last_char_in = (getraw_last_char_in + 1) % IN_BUF_SIZE;
+ }
+ 
++/* Sleep until JavaScript delivers input (it calls Module.wakeInput), or for
++ * at most a second.  Polling every few milliseconds instead kept the CPU
++ * busy while the REPL sat idle, and iOS then appeared to move the page to
++ * its slow, power-saving cores, which made later evaluations ~10x slower. */
++EM_ASYNC_JS(void, web_wait_input, (), {
++  await new Promise((resolve) => {
++    const timer = setTimeout(done, 1000);
++    function done() { clearTimeout(timer); Module.wakeInput = null; resolve(); }
++    Module.wakeInput = done;
++  });
++});
++
+ static int
+ getraw(void)
+ {
+   getraw_waiting = 1;
+   for(;;) {
+-    /* Busy-wait for a character to appear */
+     if (getraw_last_char_in != getraw_last_char_out) {
+       int ch = getraw_last_chars[getraw_last_char_out];
+       getraw_last_char_out = (getraw_last_char_out + 1) % IN_BUF_SIZE;
+@@ -68,7 +79,7 @@ getraw(void)
+       getraw_waiting = 0;
+       return ch;
+     }
+-    emscripten_sleep(10);
++    web_wait_input();
+   }
+ }
+ 
+@@ -92,8 +103,10 @@ yield_extra(void)
  {
    static double last;
    double now = emscripten_get_now();
@@ -340,7 +416,7 @@ index 51672f10..a7231b48 100644
      last = now;
      emscripten_sleep(0);
    }
-@@ -177,7 +179,22 @@ getraw(void)
+@@ -177,7 +190,22 @@ getraw(void)
   * Get a raw input character.
   * If undefined, the default always returns -1
   */
