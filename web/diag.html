@@ -131,7 +131,44 @@ async function appRuns(query) {
   return results;
 }
 
+// diag.html?app runs only the app-in-a-frame tests, one configuration at a
+// time, and keeps the results in localStorage so they survive the tab being
+// reloaded (iOS reloads a tab that ran out of memory).
+const APP_TESTS = [['F', 'Full app', ''], ['G', 'App without drawing layer', 'noink'],
+                   ['H', 'App without viewport handling', 'novv'], ['I', 'App without both', 'noink&novv']];
+const appMode = new URLSearchParams(location.search).has('app');
+function loadResults() {
+  try { return JSON.parse(localStorage.getItem('diag.results')) || {}; } catch (e) { return {}; }
+}
+function saveResults(r) {
+  try { localStorage.setItem('diag.results', JSON.stringify(r)); } catch (e) { /* ignore */ }
+}
+function showResults() {
+  rows.textContent = '';
+  const res = loadResults();
+  for (const [k, label] of APP_TESTS) {
+    if (res[k]) row(`${k}. ${label} (3 runs)`, res[k]);
+  }
+}
+async function runApp() {
+  document.getElementById('run').disabled = true;
+  const res = loadResults();
+  for (const [k, label, q] of APP_TESTS) {
+    if (res[k] && !res[k].startsWith('running')) continue;
+    if (res[k] === 'running') { res[k] = 'tab was reloaded during this test (out of memory?)'; saveResults(res); showResults(); continue; }
+    res[k] = 'running';
+    saveResults(res);
+    showResults();
+    res[k] = (await appRuns(q)).join(', ');
+    saveResults(res);
+    showResults();
+  }
+  document.getElementById('info').textContent = navigator.userAgent + '\n' + new Date().toISOString();
+  document.getElementById('run').disabled = false;
+}
+
 async function run() {
+  if (appMode) return runApp();
   document.getElementById('run').disabled = true;
   rows.textContent = '';
   const p = await probe();
@@ -194,6 +231,16 @@ async function run() {
   document.getElementById('run').disabled = false;
 }
 document.getElementById('run').addEventListener('click', run);
+if (appMode) {
+  document.querySelector('h1').textContent = 'App speed test';
+  document.querySelector('p').textContent = 'Runs the app four ways. If the page reloads by itself, just tap Run again: finished results are kept.';
+  const reset = document.createElement('button');
+  reset.textContent = 'Start over';
+  reset.style.marginLeft = '8px';
+  reset.addEventListener('click', () => { saveResults({}); showResults(); });
+  document.getElementById('run').after(reset);
+  showResults();
+}
 </script>
 </body>
 </html>
