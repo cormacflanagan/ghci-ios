@@ -40,6 +40,8 @@ Always use the Home Screen app. Safari tabs keep their own separate file storage
   change files. Ink drawn on code or REPL output scrolls with it, scales with
   the text size, and belongs to that file (it hides when you switch files). If iPadOS
   Scribble interferes, turn it off in Settings → Apple Pencil.
+- The ▭ button moves the REPL between the right and the bottom. Drag the bar
+  between editor and REPL to resize them; double-tap the bar to reset.
 - A− / A+ (⌘− / ⌘+) change the text size. ◐ switches between light and dark.
   Code / Both / REPL choose the layout.
 - ↑/↓ (hardware keyboard) step through REPL history.

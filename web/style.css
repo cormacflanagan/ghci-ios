@@ -152,6 +152,15 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .segmented button + button { border-left: 1px solid var(--border); }
 .segmented button[aria-pressed="true"] { background: var(--accent); color: #fff; }
 
+/* Tablets: a little tighter, so the toolbar stays on one row. */
+@media (max-width: 1300px) {
+  #toolbar { gap: 8px; padding: 8px 10px; }
+  .group { gap: 6px; }
+  .btn { padding: 0 11px; }
+  .btn.icon { padding: 0 8px; }
+  .segmented button { padding: 0 10px; }
+}
+
 /* Phones and small windows: one or two compact toolbar rows, icon buttons. */
 @media (max-width: 900px), (max-height: 500px) {
   #toolbar { gap: 6px; padding: 6px 8px; }
@@ -167,19 +176,44 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 }
 
 /* ---------- panes ---------- */
-#panes { flex: 1; display: flex; min-height: 0; }
-#panes[data-layout="split"] { flex-direction: row; }
+#panes { flex: 1; display: flex; min-height: 0; --split: 0.55; }
+#panes[data-pos="bottom"] { flex-direction: column; }
 .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-#editor-pane { flex: 1 1 55%; border-right: 1px solid var(--border); }
-#console-pane { flex: 1 1 45%; background: var(--panel); }
-#panes[data-layout="editor"] #console-pane { display: none; }
-#panes[data-layout="console"] #editor-pane { display: none; }
-#panes[data-layout="editor"] #editor-pane { border-right: none; }
+#editor-pane { flex: 0 0 calc(var(--split) * 100% - 6px); }
+#console-pane { flex: 1 1 0; background: var(--panel); }
+#panes[data-layout="editor"] #console-pane,
+#panes[data-layout="console"] #editor-pane,
+#panes:not([data-layout="split"]) #divider { display: none; }
+#panes:not([data-layout="split"]) .pane { flex: 1 1 0; }
 
-@media (orientation: portrait) {
-  #panes[data-layout="split"] { flex-direction: column; }
-  #panes[data-layout="split"] #editor-pane { border-right: none; border-bottom: 1px solid var(--border); }
+/* The bar between editor and REPL; drag it to resize. */
+#divider {
+  flex: 0 0 12px;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  cursor: col-resize;
+  touch-action: none;
+  position: relative;
 }
+#divider::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 4px; height: 40px;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  background: var(--muted);
+  opacity: 0.6;
+}
+#panes[data-pos="bottom"] #divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  cursor: row-resize;
+}
+#panes[data-pos="bottom"] #divider::after { width: 40px; height: 4px; }
+#divider.dragging { background: var(--active-line); }
 
 #editor { flex: 1; min-height: 0; overflow: hidden; }
 #editor .cm-editor { height: 100%; }

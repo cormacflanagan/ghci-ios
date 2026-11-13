@@ -162,7 +162,7 @@ export function setupInk({ panes, canvas, bar, button, settings, save, currentFi
   function wantsInk(e) {
     if (!on || !(e.pointerType === 'pen' || e.pointerType === 'mouse')) return false;
     if (e.pointerType === 'mouse' && e.button !== 0) return false;
-    if (e.target.closest && e.target.closest('#ink-bar, #toolbar, .sheet')) return false;
+    if (e.target.closest && e.target.closest('#ink-bar, #toolbar, .sheet, #divider')) return false;
     return inside(e);
   }
 
@@ -234,7 +234,7 @@ export function setupInk({ panes, canvas, bar, button, settings, save, currentFi
   for (const type of ['click', 'mousedown', 'dblclick', 'contextmenu']) {
     document.addEventListener(type, (e) => {
       if (active || Date.now() - lastInkUp < 400) {
-        if (!(e.target.closest && e.target.closest('#ink-bar, #toolbar, .sheet'))) swallow(e);
+        if (!(e.target.closest && e.target.closest('#ink-bar, #toolbar, .sheet, #divider'))) swallow(e);
       }
     }, true);
   }
@@ -246,7 +246,7 @@ export function setupInk({ panes, canvas, bar, button, settings, save, currentFi
     document.addEventListener(type, (e) => {
       if (!on || !stylus(e)) return;
       const t = e.changedTouches[0];
-      if (e.target.closest && e.target.closest('#ink-bar, #toolbar, .sheet')) return;
+      if (e.target.closest && e.target.closest('#ink-bar, #toolbar, .sheet, #divider')) return;
       if (type === 'touchstart' && !inside(t)) return;
       e.preventDefault();
     }, { capture: true, passive: false });

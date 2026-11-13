@@ -195,6 +195,36 @@ try {
   const fs2 = await page.$eval('#output', (el) => getComputedStyle(el).fontSize);
   check('font size increases', parseFloat(fs2) > parseFloat(fs1), fs1 + ' -> ' + fs2);
 
+  // REPL position and divider.
+  const paneBox = (sel) => page.$eval(sel, (el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+  let ed0 = await paneBox('#editor-pane');
+  let con0 = await paneBox('#console-pane');
+  check('REPL starts on the right in landscape', con0.x > ed0.x + ed0.w - 1);
+  await page.click('#pos-btn');
+  let ed1 = await paneBox('#editor-pane');
+  let con1 = await paneBox('#console-pane');
+  check('REPL moves to the bottom', con1.y > ed1.y + ed1.h - 1 && Math.abs(con1.w - ed1.w) < 2);
+  const dv = await paneBox('#divider');
+  await page.mouse.move(dv.x + dv.w / 2, dv.y + dv.h / 2);
+  await page.mouse.down();
+  await page.mouse.move(dv.x + dv.w / 2, dv.y + dv.h / 2 - 150, { steps: 6 });
+  await page.mouse.up();
+  const ed2 = await paneBox('#editor-pane');
+  check('dragging the divider resizes the panes', ed2.h < ed1.h - 120, `${ed1.h} -> ${ed2.h}`);
+  o = await run('2 * 21');
+  check('REPL works at the bottom', o.includes('42'), o);
+  await page.reload();
+  await waitReady();
+  const ed3 = await paneBox('#editor-pane');
+  const con3 = await paneBox('#console-pane');
+  check('position and size are remembered', con3.y > ed3.y + ed3.h - 1 && Math.abs(ed3.h - ed2.h) < 3, `${ed2.h} vs ${ed3.h}`);
+  await page.click('#pos-btn');
+  await page.mouse.dblclick(...await page.$eval('#divider', (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }));
+  await page.waitForTimeout(100);
+  const ed4 = await paneBox('#editor-pane');
+  const pw = await paneBox('#panes');
+  check('back on the right; double-tap resets the size', Math.abs(ed4.w / pw.w - 0.55) < 0.03, `${(ed4.w / pw.w).toFixed(2)}`);
+
   // Ink: Pencil and mouse draw over the panes without clicking through.
   const inkPixels = () => page.evaluate(() => {
     const c = document.querySelector('#ink');

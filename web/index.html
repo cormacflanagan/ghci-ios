@@ -53,6 +53,9 @@
         <button id="theme-btn" class="btn icon" title="Light / dark">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" class="fill"/></svg>
         </button>
+        <button id="pos-btn" class="btn icon" title="Put the REPL on the right or at the bottom">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path id="pos-line" d="M14 4v16"/></svg>
+        </button>
         <div class="segmented" role="group" aria-label="Layout">
           <button data-layout="editor" title="Editor only">Code</button>
           <button data-layout="split" title="Editor and REPL">Both</button>
@@ -75,6 +78,7 @@
       <section id="editor-pane" class="pane">
         <div id="editor"></div>
       </section>
+      <div id="divider" role="separator" aria-label="Drag to resize; double-tap to reset" title="Drag to resize; double-tap to reset"></div>
       <section id="console-pane" class="pane">
         <div class="pane-bar">
           <span id="status" class="status starting">Starting…</span>

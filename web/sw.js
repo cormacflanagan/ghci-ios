@@ -1,7 +1,7 @@
 // Offline support.  Pages come from the network when it answers quickly;
 // other files come from the cache, which is refreshed in the background so
 // the next launch picks up a new version.
-const CACHE = 'haskell-repl-v16';
+const CACHE = 'haskell-repl-v17';
 const ASSETS = [
   './', 'index.html', 'style.css', 'app.js', 'repl.js', 'ink.js', 'worker.js',
   'vendor/editor.js', 'vendor/share.js', 'mhs/mhs.js', 'mhs/mhs.wasm',

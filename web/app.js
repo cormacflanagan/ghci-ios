@@ -667,6 +667,7 @@ function applySettings() {
   if (meta) meta.content = settings.theme === 'dark' ? '#1e1e21' : '#ffffff';
   if (editor) editor.setFontSize(settings.font);
   $('#panes').dataset.layout = settings.layout;
+  applyPanes();
   for (const b of document.querySelectorAll('.segmented button')) {
     b.setAttribute('aria-pressed', String(b.dataset.layout === settings.layout));
   }
@@ -677,6 +678,66 @@ function applySettings() {
 function setFont(delta) {
   settings.font = Math.max(12, Math.min(56, settings.font + delta));
   applySettings();
+}
+
+// Where the REPL goes ('right' or 'bottom'; unset means right in landscape,
+// bottom in portrait) and the editor's share of the space (settings.split).
+const portrait = window.matchMedia('(orientation: portrait)');
+
+function replPos() {
+  return settings.replPos || (portrait.matches ? 'bottom' : 'right');
+}
+
+function applyPanes() {
+  const panes = $('#panes');
+  const pos = replPos();
+  panes.dataset.pos = pos;
+  panes.style.setProperty('--split', String(settings.split || 0.55));
+  const line = $('#pos-line');
+  if (line) line.setAttribute('d', pos === 'bottom' ? 'M3 14h18' : 'M14 4v16');
+  if (window.__ink) window.__ink.refresh();
+}
+
+function togglePos() {
+  settings.replPos = replPos() === 'bottom' ? 'right' : 'bottom';
+  applySettings();
+}
+
+function setupDivider() {
+  const divider = $('#divider');
+  const panes = $('#panes');
+  let dragging = false;
+  let lastTap = 0;
+  divider.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    const now = Date.now();
+    if (now - lastTap < 350) {       // double-tap: back to the default split
+      settings.split = 0.55;
+      applySettings();
+      lastTap = 0;
+      return;
+    }
+    lastTap = now;
+    dragging = true;
+    divider.classList.add('dragging');
+    try { divider.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  });
+  divider.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const r = panes.getBoundingClientRect();
+    const f = replPos() === 'bottom' ? (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
+    settings.split = Math.max(0.15, Math.min(0.85, f));
+    applyPanes();
+  });
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    divider.classList.remove('dragging');
+    applySettings();                 // saves the new size
+  };
+  divider.addEventListener('pointerup', end);
+  divider.addEventListener('pointercancel', end);
+  portrait.addEventListener('change', applyPanes);
 }
 
 function setLayout(layout) {
@@ -769,6 +830,8 @@ function init() {
     b.addEventListener('click', () => setLayout(b.dataset.layout));
   }
   $('#clear-btn').addEventListener('click', clearOutput);
+  $('#pos-btn').addEventListener('click', togglePos);
+  setupDivider();
   $('#files-btn').addEventListener('click', openSheet);
   $('#file-name').addEventListener('click', guard(() => renameFile(current)));
   $('#files-sheet').addEventListener('click', (e) => {
